@@ -54,13 +54,11 @@ def create_item_from_task(doc, method):
 
 
 def validate_items_and_set_history(doc, method):
-	if not doc.project:
-		return
-
-	for item in doc.items:
-		if item.reference_task and item.percent_billed != frappe.db.get_value('Task', item.reference_task, 'percent_billed'):
-			frappe.throw(_('Task <b>{}</b> already invoiced, please verify Row #{}')
-				.format(item.reference_task, item.idx))
+	if doc.project:
+		for item in doc.items:
+			if item.reference_task and item.percent_billed != frappe.db.get_value('Task', item.reference_task, 'percent_billed'):
+				frappe.throw(_('Task <b>{}</b> already invoiced, please verify Row #{}')
+					.format(item.reference_task, item.idx))
 
 	set_billing_history(doc)
 
@@ -130,6 +128,8 @@ def set_billing_history(doc):
 			item_detail.update(invoice_status[0])
 
 		doc.past_billing_details = frappe.render_template('templates/includes/billing_history.html', dict(items=item_details, currency=doc.currency))
+	else:
+		doc.past_billing_details = ''
 
 
 def update_task_billing_percentage(doc, method):

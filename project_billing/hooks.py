@@ -5,21 +5,35 @@ from . import __version__ as app_version
 app_name = "project_billing"
 app_title = "Project Billing"
 app_publisher = "earthians"
-app_description = "To make task wise billing of project"
-app_icon = "octicon octicon-file-directory"
-app_color = "grey"
+app_description = "Extension to Project to allow Task Progressive Billing"
+app_icon = "octicon octicon-rocket"
+app_color = "purple"
 app_email = "info@earthianslive.com"
 app_license = "MIT"
 
-fixtures = [{"dt":"Custom Field", "filters": [["fieldname", "in",
-	("task_group", "billable_amount", "item", "billing_details", "column_break_24", "uom",
-	"percent_billed", "reference_task", "billing_history", "past_billing_details", "task_progress",
-	"retention_percentage", "retention_amount", "project_retention_amount", "full_amount", "full_rate",
-	"is_milestone")]]},
-	{"dt":"Property Setter", "filters": [["doc_type", "in", ("Task")]]},
-	{"dt":"Print Format", "filters": [["name", "=", ("Project Progressive Invoice")]]},
-	"Custom Script"]
+fixtures = [{"dt":"Custom Field",
+				"filters": [
+					["fieldname", "in",
+						("task_group", "billable_amount", "item", "billing_details","column_break_24", "uom",
+						"percent_billed", "reference_task", "billing_history", "past_billing_details", 
+						"task_progress", "retention_percentage", "retention_amount", "project_retention_amount",
+						"full_amount", "full_rate", "is_milestone")
+					]
+				]
+			},
+			{"dt":"Property Setter",
+				"filters": [["doc_type", "in", ("Task", "Project Template Task")]]
+			},
+			{"dt":"Print Format",
+				"filters": [["name", "=", ("Project Progressive Invoice")]]
+			}
+		]
 
+doctype_js = {
+	"Sales Invoice": "public/js/sales_invoice.js",
+	"Project": "public/js/project.js",
+	"Task": "public/js/task.js"
+}
 
 doc_events = {
 	"Task": {
@@ -31,7 +45,6 @@ doc_events = {
 		"validate": "project_billing.project_billing.utils.validate_items_and_set_history"
 	}
 }
-
 
 # Includes in <head>
 # ------------------
