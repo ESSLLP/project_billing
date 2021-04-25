@@ -5,8 +5,12 @@ from frappe.utils import flt, today, add_days
 from erpnext.stock.get_item_details import get_item_details
 from erpnext import get_default_currency
 
-
+# Task Hooks
 def create_item_from_task(doc, method):
+	'''
+	before insert Task
+	Create Item for billing for is_milestone
+	'''
 	if doc.project:
 		project_template = frappe.db.get_value('Project', doc.project, 'project_template')
 		if project_template:
@@ -53,17 +57,11 @@ def create_item_from_task(doc, method):
 	doc.item = item_name
 
 
-def validate_items_and_set_history(doc, method):
-	if doc.project:
-		for item in doc.items:
-			if item.reference_task and item.percent_billed != frappe.db.get_value('Task', item.reference_task, 'percent_billed'):
-				frappe.throw(_('Task <b>{}</b> already invoiced, please verify Row #{}')
-					.format(item.reference_task, item.idx))
-
-	set_billing_history(doc)
-
-
 def validate_task_billing_details(doc, method):
+	'''
+	validate Task
+	Validate billable amounts with Project Estimate
+	'''
 	if flt(doc.progress) < flt(doc.percent_billed):
 		frappe.throw(_('Task Progress cannot be less than the percentage already Invoiced'))
 
@@ -97,8 +95,70 @@ def validate_task_billing_details(doc, method):
 			),
 			title=_('Did not Save')
 		)
-	# else: # TODO: set project estimated cost?
-	# 	frappe.db.set_value('Project', doc.project, 'estimated_costing', total_tasks_billable)
+
+
+# Sales Invoice hooks
+def validate_items_and_set_history(doc, method):
+	'''
+	validate Sales Invoice
+	'''
+	doc.invoice_retention_amount = 0
+	if doc.project:
+		for item in doc.items:
+			if item.reference_task:
+				if item.percent_billed != frappe.db.get_value('Task', item.reference_task, 'percent_billed'):
+					frappe.throw(_('Progress of Tasks for billing is not up to date, please reselect Project to fetch billing items again'))
+
+				# reset billing values based on invoice quantity
+				retention_percentage = frappe.db.get_value('Project', doc.project, 'retention_percentage')
+				actual_billable_amount = flt(item.billable_amount) - \
+					(flt(item.billable_amount) * (flt(retention_percentage) / 100) if retention_percentage else 0)
+
+				item.full_rate = (flt(item.billable_amount) / 100) * flt(doc.plc_conversion_rate) / flt(doc.conversion_rate)
+				item.rate = (flt(actual_billable_amount) / 100) * flt(doc.plc_conversion_rate) / flt(doc.conversion_rate)
+				item.full_amount = item.qty * item.full_rate
+				item.amount =  item.qty * item.rate
+				# retention amount without considering invoice currency
+				item.retention_amount = (flt(item.billable_amount) / 100) * item.qty - \
+					(flt(actual_billable_amount) / 100) *  item.qty
+
+				# aggregate and set total retention amount)
+				doc.invoice_retention_amount += item.retention_amount
+
+	# set billing history
+	set_billing_history(doc)
+
+
+def update_project_and_task(doc, method):
+	'''
+	on submit Sales Invoice
+	on cancel Sales Invoice
+	Update Task billed percentage
+	Update Project invoiced retention amount
+	'''
+	if doc.project:
+		# Update Task billed percentage
+		for item in doc.items:
+			if item.reference_task and frappe.db.exists('Task', item.reference_task):
+				billed_percentage = frappe.db.get_value('Task', item.reference_task, 'percent_billed')
+				if doc.docstatus == 1:
+					billed_percentage = billed_percentage + item.qty
+				else:
+					billed_percentage =  billed_percentage - item.qty
+					# Also set percent_billed, so that the invoice can be amended
+					# TODO: verify
+					item.percent_billed = billed_percentage
+				frappe.db.set_value('Task', item.reference_task, 'percent_billed', billed_percentage)
+
+		# Update Project Retention Amount
+		if doc.invoice_retention_amount and doc.invoice_retention_amount > 0:
+			total_retention_amount = frappe.db.get_value('Project', doc.project, 'total_retention_amount')
+			if doc.docstatus == 1:
+				total_retention_amount = total_retention_amount + doc.invoice_retention_amount
+			else:
+				total_retention_amount = total_retention_amount - doc.invoice_retention_amount
+
+			frappe.db.set_value('Project', doc.project, 'total_retention_amount', total_retention_amount)
 
 
 def set_billing_history(doc):
@@ -126,35 +186,31 @@ def set_billing_history(doc):
 		for item_detail in item_details:
 			invoice_status = [inv for inv in past_invoices if inv['name'] == item_detail['parent']]
 			item_detail.update(invoice_status[0])
-
-		doc.past_billing_details = frappe.render_template('templates/includes/billing_history.html', dict(items=item_details, currency=doc.currency))
+		print(item_details)
+		doc.project_billing_history = frappe.render_template('templates/includes/billing_history.html',
+			dict(items=item_details, currency=doc.currency))
 	else:
-		doc.past_billing_details = ''
-
-
-def update_task_billing_percentage(doc, method):
-	if doc.project:
-		for item in doc.items:
-			if item.reference_task and frappe.db.exists('Task', item.reference_task):
-				billed_percentage = frappe.db.get_value('Task', item.reference_task, 'percent_billed')
-				frappe.db.set_value('Task', item.reference_task, 'percent_billed', billed_percentage + item.qty)
+		doc.project_billing_history = ''
 
 
 @frappe.whitelist()
 def get_billing_details(doc):
 	'''
 	get billable task details for the project
+	invoked from Sales Invoice, on project
 	'''
 	invoice = json.loads(doc)
 	if not invoice.get('project'):
 		return
 
-	complete_method, retention_percentage = frappe.db.get_value('Project', invoice.get('project'),
-		['percent_complete_method', 'retention_percentage'])
+	project_details = frappe.db.get_value('Project', invoice.get('project'),
+		['percent_complete_method', 'retention_percentage', 'sales_order', 'total_sales_amount'],
+		as_dict=1
+	)
 
-	if complete_method == 'Task Completion':
+	if project_details.percent_complete_method == 'Task Completion':
 		filters = {'status': 'Completed'}
-	elif complete_method in ['Task Progress', 'Task Weight']:
+	elif project_details.percent_complete_method in ['Task Progress', 'Task Weight']:
 		filters = {'progress': ['<=', 100]}
 	else:
 		return
@@ -168,43 +224,50 @@ def get_billing_details(doc):
 		frappe.throw(_('No Tasks for the selected Project indicate billable progress, please try after updating Task progress / status'))
 
 	items = []
-	project_retention_amount = 0.0
+	invoice_retention_amount = 0.0
 
 	for task in tasks:
-		if complete_method != 'Task Completion' and task.progress <= task.percent_billed:
+		if project_details.percent_complete_method != 'Task Completion' and task.progress <= task.percent_billed:
 			continue
 
-		args = {
+		item_details = get_item_details({
 			'doctype': 'Sales Invoice',
 			'item_code': task.item,
 			'company': invoice.get('company'),
 			'selling_price_list': invoice.get('price_list'),
 			'price_list_currency': invoice.get('currency'),
 			'plc_conversion_rate': invoice.get('plc_conversion_rate'),
-			'conversion_rate': 1.0 # TODO: Required?
-		}
-		item_details = get_item_details(args)
+			'conversion_rate': invoice.get('conversion_rate')
+		})
 
-		if complete_method == 'Task Weight':
-			item_details['qty'] = (task.progress - task.percent_billed) * task.task_weight
-		elif complete_method == 'Task Progress':
+		if project_details.percent_complete_method == 'Task Progress':
 			item_details['qty'] = task.progress - task.percent_billed
-		elif complete_method == 'Task Completion':
-			item_details['qty'] = 100
+		elif project_details.percent_complete_method == 'Task Completion':
+			item_details['qty'] = 100 - task.percent_billed if task.percent_billed < 100 else 100
+		elif project_details.percent_complete_method == 'Task Weight':
+			item_details['qty'] = task.progress - task.percent_billed # TODO: same as Task Progress for now, fix!
 
-		# Consider retention for rate calculation
-		actual_billable_amount = flt(task.billable_amount) - ((flt(task.billable_amount) * (flt(retention_percentage) / 100)) if retention_percentage else 0)
+		# actual billable amount based on retention percentage
+		actual_billable_amount = flt(task.billable_amount) - \
+			(flt(task.billable_amount) * (flt(project_details.retention_percentage) / 100) if project_details.retention_percentage else 0)
+
 		item_details['billable_amount'] = flt(task.billable_amount)
-		item_details['full_rate'] = flt(task.billable_amount) / 100
-		item_details['rate'] = flt(actual_billable_amount) / 100
+		item_details['full_rate'] = (flt(task.billable_amount) / 100) * \
+			flt(invoice.get('plc_conversion_rate')) / flt(invoice.get('conversion_rate'))
+		item_details['rate'] = (flt(actual_billable_amount) / 100) * \
+			flt(invoice.get('plc_conversion_rate')) / flt(invoice.get('conversion_rate'))
 		item_details['full_amount'] = item_details['qty'] * item_details['full_rate']
 		item_details['amount'] =  item_details['qty'] * item_details['rate']
-		item_details['retention_amount'] =  item_details['full_amount'] - item_details['amount']
 		item_details['uom'] = task.uom
 		item_details['reference_task'] = task.name
 		item_details['task_progress'] = task.progress
 		item_details['percent_billed'] = task.percent_billed
+		item_details['sales_order'] = project_details.sales_order
+		item_details['retention_amount'] = (flt(task.billable_amount) / 100) * item_details['qty'] - \
+			(flt(actual_billable_amount) / 100) * item_details['qty']
 		items.append(item_details)
-		project_retention_amount += item_details['retention_amount']
 
-	return items, project_retention_amount
+		# aggregate total retention amount for the invoice
+		invoice_retention_amount += item_details['retention_amount']
+
+	return items, invoice_retention_amount

@@ -13,11 +13,18 @@ app_license = "MIT"
 
 fixtures = [{"dt":"Custom Field",
 				"filters": [
-					["fieldname", "in",
-						("task_group", "billable_amount", "item", "billing_details","column_break_24", "uom",
-						"percent_billed", "reference_task", "billing_history", "past_billing_details", 
-						"task_progress", "retention_percentage", "retention_amount", "project_retention_amount",
-						"full_amount", "full_rate", "is_milestone")
+					["name", "in", (
+						"Task-task_group", "Task-billable_amount",
+						"Task-item", "Task-billing_details", "Task-uom",
+						"Task-percent_billed", "Task-column_break_24",
+						"Sales Invoice-billing_history", "Sales Invoice-project_billing_history",
+						"Sales Invoice Item-percent_billed", "Sales Invoice Item-billable_amount",
+						"Sales Invoice Item-reference_task", "Sales Invoice Item-task_progress",
+						"Sales Invoice Item-full_amount", "Sales Invoice Item-full_rate",
+						"Project-retention_percentage", "Project-total_retention_amount",
+						"Project-progressive_billing", "Project-column_break_47"
+						"Project Template Task-billable_amount", "Project Template Task-is_milestone"
+						)
 					]
 				]
 			},
@@ -41,8 +48,9 @@ doc_events = {
 		"validate": "project_billing.project_billing.utils.validate_task_billing_details"
 	},
 	"Sales Invoice": {
-		"on_submit": "project_billing.project_billing.utils.update_task_billing_percentage",
-		"validate": "project_billing.project_billing.utils.validate_items_and_set_history"
+		"validate": "project_billing.project_billing.utils.validate_items_and_set_history",
+		"on_submit": "project_billing.project_billing.utils.update_project_and_task",
+		"on_cancel": "project_billing.project_billing.utils.update_project_and_task"
 	}
 }
 

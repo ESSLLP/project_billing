@@ -9,7 +9,7 @@ frappe.ui.form.on('Sales Invoice', {
                 callback: function (r) {
                     if (r.message) {
                         let tasks = r.message[0];
-                        let project_retention_amount = r.message[1];
+                        let invoice_retention_amount = r.message[1];
                         if (tasks.length > 0) {
                             frm.set_value('items', []);
                             tasks.forEach(function (task) {
@@ -29,10 +29,11 @@ frappe.ui.form.on('Sales Invoice', {
                                     reference_task: task.reference_task,
                                     billable_amount: task.billable_amount,
                                     task_progress: task.task_progress,
+                                    sales_order: task.sales_order,
                                     percent_billed: task.percent_billed
                                 });
                                 frm.refresh_field('items');
-                                frm.set_value('project_retention_amount', project_retention_amount);
+                                frm.set_value('invoice_retention_amount', invoice_retention_amount);
                             });
                         } else {
                             frappe.show_alert({
