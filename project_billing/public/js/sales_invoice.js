@@ -29,8 +29,10 @@ frappe.ui.form.on('Sales Invoice', {
                                     reference_task: task.reference_task,
                                     billable_amount: task.billable_amount,
                                     task_progress: task.task_progress,
+                                    progress_billed: task.progress_billed,
+                                    progress_qty: task.progress_qty,
+                                    percent_billed: task.percent_billed,
                                     sales_order: task.sales_order,
-                                    percent_billed: task.percent_billed
                                 });
                                 frm.refresh_field('items');
                                 frm.set_value('invoice_retention_amount', invoice_retention_amount);
@@ -39,7 +41,6 @@ frappe.ui.form.on('Sales Invoice', {
                             frappe.show_alert({
                                 message: __('No Tasks for the selected Project indicate billable progress, please try after updating Task progress / status'),
                                 indicator: 'orange'
-
                             });
                             // frm.set_value('project', '');
                         }
