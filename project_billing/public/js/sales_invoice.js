@@ -29,10 +29,11 @@ frappe.ui.form.on('Sales Invoice', {
                                     reference_task: task.reference_task,
                                     billable_amount: task.billable_amount,
                                     task_progress: task.task_progress,
+                                    sales_order: task.sales_order,
                                     percent_billed: task.percent_billed
                                 });
                                 frm.refresh_field('items');
-                                frm.set_value('project_retention_amount', project_retention_amount);
+                                frm.set_value('invoice_retention_amount', invoice_retention_amount);
                             });
                         } else {
                             frappe.show_alert({
