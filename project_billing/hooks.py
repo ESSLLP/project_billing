@@ -62,7 +62,7 @@ doc_events = {
 		"on_cancel": "project_billing.project_billing.utils.update_project_and_task"
 	},
 	"Project Template": {
-		"before_insert": "project_billing.project_billing.utils.create_items_from_project_template",
+		"validate": "project_billing.project_billing.utils.create_items_from_project_template",
 	},
 
 
