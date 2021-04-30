@@ -331,7 +331,7 @@ def get_item_link(doc):
 	return item link name if exists
 	else return new item link name
 	'''
-	if not doc.task_item and frappe.db.get_value('Item', doc.task_item, 'name'):
+	if not doc.task_item and frappe.db.exists('Item', doc.task_item):
 		return doc.task_item
 	elif frappe.db.exists('Item', doc.subject):
 		return frappe.db.get_value('Item', doc.subject, 'name')
