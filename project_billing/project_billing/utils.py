@@ -146,35 +146,31 @@ def validate_items_and_set_history(doc, method):
 					frappe.throw(_('Progress of Tasks for billing does not match, please reselect Project to fetch items based on current progress'))
 
 				# Verify if billed qty is more than billable progress
-				progress_qty, advance_adjustment = get_billable_qty(task_details, advance_percentage)
-				billable_qty = abs(progress_qty - advance_adjustment)
+				billable_qty, progress_qty = get_billable_qty(task_details, advance_percentage)
 
 				if flt(item.qty) > billable_qty or item.progress_qty > progress_qty:
-					frappe.throw(_('Quantity exceeds Task billable quantity {} Percent, Please verify Row#{}')
+					frappe.throw(_('Quantity exceeds Task billable quantity {} percent, Please verify Row #{}')
 						.format(frappe.bold(billable_qty), item.idx))
+
+				# Ensure no retention for advance
+				if item.progress_qty == 0:
+					retention_percentage = 0
 
 				# Billing rate shouldn't be changed, recalculate and set rate
 				# Also set amount based on rate and invoice quantity
-				if item.progress_qty == 0:
-					retention_percentage = 0
-					actual_billable_amount = flt(item.billable_amount)
-				else:
-					# TODO: set retention_percentage
-					actual_billable_amount = flt(item.billable_amount) - \
-						(flt(item.billable_amount) * frappe.utils.safe_div(retention_percentage, 100))
-
+				actual_billable_amount = get_actual_billable_amount(item, retention_percentage, advance_percentage)
 				item.full_rate = (flt(item.billable_amount) / 100) * flt(doc.plc_conversion_rate) / flt(doc.conversion_rate)
 				item.rate = (flt(actual_billable_amount) / 100) * flt(doc.plc_conversion_rate) / flt(doc.conversion_rate)
 				item.full_amount = item.qty * item.full_rate
 				item.amount =  item.qty * item.rate
 
-				# Recalculate retention amount on billing qty @ full rate
+				# NOTE: full amount will be in invoice currency, and qty is editable - recalculate
 				item.retention_amount = (flt(item.billable_amount) / 100) * flt(item.qty) - \
 					(flt(actual_billable_amount) / 100) * flt(item.qty)
 
 				doc.invoice_retention_amount += item.retention_amount
 
-	# set billing history
+	# Set billing history
 	set_billing_history(doc)
 
 
@@ -183,13 +179,17 @@ def get_billing_details(doc):
 	'''
 	get billable task details for the project
 	invoked from Sales Invoice, on project
+	NOTE:
+	1 - to deal with advance, play on billing qty
+	2 - to deal with retention, play on rate (via the actual billable amount)
 	'''
 	invoice = json.loads(doc)
 	if not invoice.get('project'):
 		return
 
 	project_details = frappe.db.get_value('Project', invoice.get('project'),
-		['percent_complete_method', 'retention_percentage', 'sales_order', 'total_sales_amount', 'advance_percentage'],
+		['percent_complete_method', 'retention_percentage', 'advance_percentage', 'sales_order',
+		'total_sales_amount', 'total_billed_amount', 'total_retention_amount'],
 		as_dict=1
 	)
 
@@ -226,34 +226,22 @@ def get_billing_details(doc):
 		})
 
 		if project_details.percent_complete_method == 'Task Progress':
-			progress_qty, advance_adjustment = get_billable_qty(task, project_details.advance_percentage)
-			billable_qty = abs(progress_qty - advance_adjustment)
-			item_details['progress_qty'] = progress_qty
-			item_details['qty'] = billable_qty
-			
-		elif project_details.percent_complete_method == 'Task Completion': # TODO: Test, Fix
-			progress_qty, advance_adjustment = get_billable_qty(task, project_details.advance_percentage)
-			billable_qty = abs(progress_qty - advance_adjustment)
-			item_details['progress_qty'] = progress_qty
-			item_details['qty'] = billable_qty
+			item_details['qty'], item_details['progress_qty'] = get_billable_qty(task, project_details.advance_percentage)
+			item_details['billable_amount'] = flt(task.billable_amount)
 
+		# Check qty here again as get_billable_qty may return 0
 		if item_details['qty'] <= 0:
-			# Check qty here again as get_billable_qty may return 0
 			continue
 
 		# no retention_percentage if advance
-		# actual billable amount based on retention percentage
 		if item_details['progress_qty'] == 0:
 			retention_percentage = 0
-			actual_billable_amount = flt(task.billable_amount)
 		else:
-			# also consider retention for the advance billed without retention
-			# TODO: set retention_percentage
 			retention_percentage = project_details.retention_percentage
-			actual_billable_amount = flt(task.billable_amount) - \
-				(flt(task.billable_amount) * frappe.utils.safe_div(retention_percentage, 100))
 
-		item_details['billable_amount'] = flt(task.billable_amount)
+		# get actual billable amount
+		actual_billable_amount = get_actual_billable_amount(item_details, retention_percentage, project_details.advance_percentage)
+
 		item_details['full_rate'] = (flt(task.billable_amount) / 100) * \
 			flt(invoice.get('plc_conversion_rate')) / flt(invoice.get('conversion_rate'))
 		item_details['rate'] = (flt(actual_billable_amount) / 100) * \
@@ -267,7 +255,7 @@ def get_billing_details(doc):
 		item_details['percent_billed'] = task.percent_billed
 		item_details['sales_order'] = project_details.sales_order
 
-		# NOTE: full amount will be in invoice currency
+		# NOTE: full amount will be in invoice currency hence recalulating. basically, full_amount - actual_billable_amount
 		item_details['retention_amount'] = (flt(item_details['billable_amount']) / 100) * flt(item_details['qty']) - \
 			(flt(actual_billable_amount) / 100) * flt(item_details['qty'])
 
@@ -279,19 +267,39 @@ def get_billing_details(doc):
 
 
 # Helpers
+def get_actual_billable_amount(task, retention=0, advance=0):
+	'''
+	Return actual_billable_amount: billable amount for the task after retention amount.
+	'''
+	if not task:
+		return 0
+
+	retention_percentage = retention + \
+			(retention * flt(frappe.utils.safe_div(advance, task.qty)))
+
+	# actual billable amount based on retention percentage
+	actual_billable_amount = flt(task.billable_amount) - \
+		(flt(task.billable_amount) * flt(frappe.utils.safe_div(flt(retention_percentage), 100)))
+
+	return actual_billable_amount
+
 def get_billable_qty(task, advance=0):
+	'''
+	Return:
+	qty: billable qty to maintain constancy of the task billable amount (advance is booked regardless of progress)
+	progress_qty: actual progress that is not yet billed
+	'''
 	if not task:
 		return 0, 0
 
+	# let's not allow progress to be billed if advance is not fully booked
 	if advance > 0 and task.percent_billed < advance:
-		return 0, abs(advance - task.percent_billed)
+		return abs(advance - task.percent_billed), 0
 
 	progress_qty = flt(task.progress - task.progress_billed)
+	qty = abs(progress_qty - (flt(advance) * progress_qty / 100))
 
-	# deduction % of advance already billed for this task proportionate to billable_progress
-	advance_adjustment = flt(advance) * progress_qty / 100
-
-	return progress_qty, advance_adjustment
+	return qty, progress_qty
 
 
 def set_billing_history(doc):

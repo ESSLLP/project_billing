@@ -11,7 +11,7 @@ frappe.ui.form.on('Sales Invoice', {
                         let tasks = r.message[0];
                         let invoice_retention_amount = r.message[1];
                         if (tasks.length > 0) {
-                            frm.set_value('items', []);
+                            frm.clear_table('items');
                             tasks.forEach(function (task) {
                                 let row = frm.add_child('items', {
                                     item_code: task.item_code,
@@ -47,6 +47,8 @@ frappe.ui.form.on('Sales Invoice', {
                     }
                 }
             });
+        } else {
+            frm.clear_table('items');
         }
     }
 });
