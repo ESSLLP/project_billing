@@ -164,7 +164,7 @@ def validate_items_and_set_history(doc, method):
 				item.full_amount = item.qty * item.full_rate
 				item.amount =  item.qty * item.rate
 
-				# NOTE: full amount will be in invoice currency, and qty is editable - recalculate
+				# NOTE: full amount is in invoice currency, and qty is editable - recalculate
 				item.retention_amount = (flt(item.billable_amount) / 100) * flt(item.qty) - \
 					(flt(actual_billable_amount) / 100) * flt(item.qty)
 
@@ -255,7 +255,7 @@ def get_billing_details(doc):
 		item_details['percent_billed'] = task.percent_billed
 		item_details['sales_order'] = project_details.sales_order
 
-		# NOTE: full amount will be in invoice currency hence recalulating. basically, full_amount - actual_billable_amount
+		# NOTE: full amount is in invoice currency hence recalulating. basically, full_amount - actual_billable_amount
 		item_details['retention_amount'] = (flt(item_details['billable_amount']) / 100) * flt(item_details['qty']) - \
 			(flt(actual_billable_amount) / 100) * flt(item_details['qty'])
 
@@ -275,11 +275,11 @@ def get_actual_billable_amount(task, retention=0, advance=0):
 		return 0
 
 	retention_percentage = retention + \
-			(retention * flt(frappe.utils.safe_div(advance, task.qty)))
+			(retention * (advance / task.qty) if advance > 0 else 0)
 
 	# actual billable amount based on retention percentage
 	actual_billable_amount = flt(task.billable_amount) - \
-		(flt(task.billable_amount) * flt(frappe.utils.safe_div(flt(retention_percentage), 100)))
+		flt(task.billable_amount) * (retention_percentage / 100) if retention_percentage > 0 else 0
 
 	return actual_billable_amount
 
