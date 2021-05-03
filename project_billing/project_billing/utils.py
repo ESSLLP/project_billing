@@ -274,14 +274,15 @@ def get_actual_billable_amount(task, retention=0, advance=0):
 	if not task:
 		return 0
 
-	retention_percentage = retention + \
-			(retention * (advance / task.qty) if advance > 0 else 0)
+	# pump up the retention percentage to accommodate retention not retained for advance
+	retention_percentage = flt(retention * flt(100 / (100 - advance)))
 
 	# actual billable amount based on retention percentage
 	actual_billable_amount = flt(task.billable_amount) - \
-		flt(task.billable_amount) * (retention_percentage / 100) if retention_percentage > 0 else 0
+		(flt(task.billable_amount) * (retention_percentage / 100) if retention_percentage > 0 else 0)
 
 	return actual_billable_amount
+
 
 def get_billable_qty(task, advance=0):
 	'''
