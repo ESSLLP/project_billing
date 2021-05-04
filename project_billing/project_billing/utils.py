@@ -12,11 +12,12 @@ def create_item_from_task(doc, method):
 	Create Item for billing for is_milestone
 	'''
 	if doc.project:
+		so_detail = ''
 		project_template, sales_order = frappe.db.get_value('Project', doc.project, ['project_template', 'sales_order'])
 		if sales_order:
 			sales_order_doc = frappe.get_doc("Sales Order", sales_order)
-			so_detail = [so_item.get('name') for so_item in sales_order_doc.items if so_item.get('item_code') == doc.subject]
-			doc.so_detail = so_detail[0]
+			so_detail = [so_item for so_item in sales_order_doc.items if so_item.get('item_code') == doc.subject]
+			doc.so_detail = so_detail[0].get('name')
 
 		if project_template:
 			project_template_doc = frappe.get_doc("Project Template", project_template)
@@ -32,8 +33,7 @@ def create_item_from_task(doc, method):
 						doc.task_item = template_task[0].get('task_item')
 						doc.task_item_uom = template_task[0].get('task_item_uom')
 						doc.task_item_group = template_task[0].get('task_item_group')
-						doc.billable_amount = template_task[0].get('billable_amount')
-
+						doc.billable_amount = so_detail[0].get('amount') if so_detail else template_task[0].get('billable_amount')
 	if not doc.is_milestone:
 		return
 
