@@ -12,7 +12,12 @@ def create_item_from_task(doc, method):
 	Create Item for billing for is_milestone
 	'''
 	if doc.project:
-		project_template = frappe.db.get_value('Project', doc.project, 'project_template')
+		project_template, sales_order = frappe.db.get_value('Project', doc.project, ['project_template', 'sales_order'])
+		if sales_order:
+			sales_order_doc = frappe.get_doc("Sales Order", sales_order)
+			so_detail = [so_item.get('name') for so_item in sales_order_doc.items if so_item.get('item_code') == doc.subject]
+			doc.so_detail = so_detail[0]
+
 		if project_template:
 			project_template_doc = frappe.get_doc("Project Template", project_template)
 
@@ -202,7 +207,7 @@ def get_billing_details(doc):
 		frappe.msgprint(_('Project Complete Method is not supported, please select Items manually'), alert=True, indicator='orange')
 
 	tasks = frappe.db.get_all('Task', filters=filters, fields=['name', 'task_item', 'task_item_group', 'description',
-		'task_item_uom', 'billable_amount', 'status', 'progress', 'progress_billed', 'percent_billed', 'task_weight'])
+		'task_item_uom', 'billable_amount', 'status', 'progress', 'progress_billed', 'percent_billed', 'task_weight', 'so_detail'])
 
 	if not tasks:
 		frappe.throw(_('No Tasks related to this Project indicate billable progress, please try after updating Task progress / status'))
@@ -254,6 +259,7 @@ def get_billing_details(doc):
 		item_details['progress_billed'] = task.progress_billed
 		item_details['percent_billed'] = task.percent_billed
 		item_details['sales_order'] = project_details.sales_order
+		item_details['so_detail'] = task.so_detail
 
 		# NOTE: full amount is in invoice currency hence recalulating. basically, full_amount - actual_billable_amount
 		item_details['retention_amount'] = (flt(item_details['billable_amount']) / 100) * flt(item_details['qty']) - \

@@ -33,6 +33,7 @@ frappe.ui.form.on('Sales Invoice', {
                                     progress_qty: task.progress_qty,
                                     percent_billed: task.percent_billed,
                                     sales_order: task.sales_order,
+                                    so_detail: task.so_detail
                                 });
                                 frm.trigger('validate');
                                 frm.refresh_fields();
