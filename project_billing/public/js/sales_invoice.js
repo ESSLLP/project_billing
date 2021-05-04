@@ -34,7 +34,8 @@ frappe.ui.form.on('Sales Invoice', {
                                     percent_billed: task.percent_billed,
                                     sales_order: task.sales_order,
                                 });
-                                frm.refresh_field('items');
+                                frm.trigger('validate');
+                                frm.refresh_fields();
                                 frm.set_value('invoice_retention_amount', invoice_retention_amount);
                             });
                         } else {

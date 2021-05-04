@@ -162,7 +162,7 @@ def validate_items_and_set_history(doc, method):
 				item.full_rate = (flt(item.billable_amount) / 100) * flt(doc.plc_conversion_rate) / flt(doc.conversion_rate)
 				item.rate = (flt(actual_billable_amount) / 100) * flt(doc.plc_conversion_rate) / flt(doc.conversion_rate)
 				item.full_amount = item.qty * item.full_rate
-				item.amount =  item.qty * item.rate
+				# item.amount =  item.qty * item.rate
 
 				# NOTE: full amount is in invoice currency, and qty is editable - recalculate
 				item.retention_amount = (flt(item.billable_amount) / 100) * flt(item.qty) - \
@@ -247,7 +247,7 @@ def get_billing_details(doc):
 		item_details['rate'] = (flt(actual_billable_amount) / 100) * \
 			flt(invoice.get('plc_conversion_rate')) / flt(invoice.get('conversion_rate'))
 		item_details['full_amount'] = item_details['qty'] * item_details['full_rate']
-		item_details['amount'] =  item_details['qty'] * item_details['rate']
+		# item_details['amount'] =  item_details['qty'] * item_details['rate']
 		item_details['uom'] = task.task_item_uom
 		item_details['reference_task'] = task.name
 		item_details['task_progress'] = task.progress
