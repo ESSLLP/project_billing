@@ -6,6 +6,9 @@ frappe.ui.form.on('Task', {
         }
         if (frm.doc.item) {
             frm.set_df_property('task_group', 'read_only', 1);
+            frm.set_df_property('task_item', 'read_only', 1);
+            frm.set_df_property('task_item_uom', 'read_only', 1);
+            frm.set_df_property('task_item_group', 'read_only', 1);
         }
     }
 });
