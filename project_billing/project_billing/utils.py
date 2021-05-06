@@ -17,7 +17,8 @@ def create_item_from_task(doc, method):
 		if sales_order:
 			sales_order_doc = frappe.get_doc("Sales Order", sales_order)
 			so_detail = [so_item for so_item in sales_order_doc.items if so_item.get('item_code') == doc.subject]
-			doc.so_detail = so_detail[0].get('name')
+			if so_detail and so_detail[0]:
+				doc.so_detail = so_detail[0].get('name')
 
 		if project_template:
 			project_template_doc = frappe.get_doc("Project Template", project_template)
