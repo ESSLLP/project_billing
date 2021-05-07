@@ -42,24 +42,6 @@ def create_item_from_task(doc, method):
 	doc.item = get_item_link(doc)
 
 
-# Project Template Task
-def create_items_from_project_template(doc, method):
-	'''
-	before insert Project Template
-	Create Items for all milestone tasks
-	'''
-	if not doc.tasks:
-		return
-
-	for task in doc.tasks:
-		if task.is_milestone:
-			task.task_item = get_item_link(task)
-			task.task_item_uom = task.task_item_uom if task.task_item_uom else 'Percent'
-			task.task_item_group = task.task_item_group if task.task_item_group else 'All Item Groups'
-			task.description = task.description if task.description else task.task_item
-
-
-# Sales Invoice hooks
 def validate_task_billing_details(doc, method):
 	'''
 	validate Task
@@ -99,6 +81,24 @@ def validate_task_billing_details(doc, method):
 		)
 
 
+# Project Template Task
+def create_items_from_project_template(doc, method):
+	'''
+	before insert Project Template
+	Create Items for all milestone tasks
+	'''
+	if not doc.tasks:
+		return
+
+	for task in doc.tasks:
+		if task.is_milestone:
+			task.task_item = get_item_link(task)
+			task.task_item_uom = task.task_item_uom if task.task_item_uom else 'Percent'
+			task.task_item_group = task.task_item_group if task.task_item_group else 'All Item Groups'
+			task.description = task.description if task.description else task.task_item
+
+
+# Sales Invoice hooks
 def update_project_and_task(doc, method):
 	'''
 	on submit Sales Invoice
@@ -135,7 +135,6 @@ def update_project_and_task(doc, method):
 			frappe.db.set_value('Project', doc.project, 'total_retention_amount', total_retention_amount)
 
 
-# Sales Invoice hooks
 def validate_items_and_set_history(doc, method):
 	'''
 	validate Sales Invoice
@@ -153,6 +152,11 @@ def validate_items_and_set_history(doc, method):
 
 				# Verify if billed qty is more than billable progress
 				billable_qty, progress_qty = get_billable_qty(task_details, advance_percentage)
+
+				# Reset progress_qty based on qty (we allow changing qty in sales invoice)
+				# item.progress_qty will be zero while billing advance
+				if item.progress_qty > 0:
+					item.progress_qty = flt(item.qty * flt(100 / (100 - advance_percentage)))
 
 				if flt(item.qty) > billable_qty or item.progress_qty > progress_qty:
 					frappe.throw(_('Quantity exceeds Task billable quantity {} percent, Please verify Row #{}')
@@ -304,8 +308,8 @@ def get_billable_qty(task, advance=0):
 	if advance > 0 and task.percent_billed < advance:
 		return abs(advance - task.percent_billed), 0
 
-	progress_qty = flt(task.progress - task.progress_billed)
-	qty = abs(progress_qty - (flt(advance) * progress_qty / 100))
+	progress_qty = flt(task.progress - flt(task.progress_billed))
+	qty = abs(progress_qty - (progress_qty * (advance / 100)))
 
 	return qty, progress_qty
 
