@@ -158,7 +158,7 @@ def validate_items_and_set_history(doc, method):
 				if item.progress_qty > 0:
 					item.progress_qty = flt(item.qty * flt(100 / (100 - advance_percentage)))
 
-				if flt(item.qty) > billable_qty or item.progress_qty > progress_qty:
+				if flt(item.qty, 2) > flt(billable_qty, 2) or flt(item.progress_qty, 2) > flt(progress_qty, 2):
 					frappe.throw(_('Quantity exceeds Task billable quantity {} percent, Please verify Row #{}')
 						.format(frappe.bold(billable_qty), item.idx))
 
